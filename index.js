@@ -287,6 +287,11 @@ document.addEventListener("keydown", event => {
         } else {
             moveMode = true
             console.log("Move Mode started")
+            if(pickPacman == true) {
+                // use the coordinate buffer to replace the pacman
+                pacman.mazeCoords = [pacmanCoordBuffer[0], pacmanCoordBuffer[1], pacmanCoordBuffer[2]]
+                pacman.update(false, pacman.mazeCoords, mazeList[currMaze])
+            }
         }
     }
 })
