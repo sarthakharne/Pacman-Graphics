@@ -1,4 +1,6 @@
-import { Scene, Triangle, Quadrilateral, WebGLRenderer, Shader } from './lib/threeD.js';
+import { Scene } from './lib/scene.js'
+import { WebGLRenderer } from './lib/renderer.js'
+import { Shader } from './lib/shader.js'
 import { vertexShaderSrc    } from './shaders/vertex.js';
 import { fragmentShaderSrc } from './shaders/fragment.js';
 import { Circle } from './lib/circle.js';
@@ -9,6 +11,8 @@ import { Maze } from './lib/maze.js';
 
 
 const renderer = new WebGLRenderer();
+
+// canvas dimensions
 const width = window.innerWidth-25
 const height = window.innerHeight-25
 renderer.setSize(width, height);
@@ -24,331 +28,258 @@ const shader = new Shader(
 shader.use();
 const scene = new Scene();
 
+// tile length of each tile of the maze
 const tileLength = 30
 var m1 = new Maze(maze1, tileLength, 'maze1', [width, height, 0], true)
-// for(var i = 0;i < m1.primitiveList.length;i++) {
-//     scene.add(m1.primitiveList[i])
-// }
-
 var m2 = new Maze(maze2, tileLength, 'maze2', [width, height, 0], true)
-// for(var i = 0;i < m2.primitiveList.length;i++) {
-//     scene.add(m2.primitiveList[i])
-// }
-
 var m3 = new Maze(maze3, tileLength, 'maze3', [width, height, 0], true)
-// for(var i = 0;i < m3.primitiveList.length;i++) {
-//     scene.add(m3.primitiveList[i])
-// }
 
+// the maze list contains all the different maze configurations
+// curr maze stores the index of the maze being sent into the scene
 var mazeList = [m1, m2, m3]
 var currMaze = 0
+// adding the maze onto the scene
 for(var i = 0;i < mazeList[currMaze].primitiveList.length;i++) {
     scene.add(mazeList[currMaze].primitiveList[i])
 }
 
-
-var pacmanMazeCoords = [mazeList[currMaze].initPacmanMazeCoords[0],
-mazeList[currMaze].initPacmanMazeCoords[1], mazeList[currMaze].initPacmanMazeCoords[2]]
+// the pacman object is a circle with radius 10
+// and appropriate center as given by the maze
 const pacman = new Circle(
     10,
-    [mazeList[currMaze].widthOffset + pacmanMazeCoords[1]*tileLength + tileLength/2,
-    mazeList[currMaze].heightOffset + pacmanMazeCoords[0]*tileLength + tileLength/2, pacmanMazeCoords[2]],
+    [mazeList[currMaze].widthOffset + mazeList[currMaze].initPacmanMazeCoords[1]*tileLength + tileLength/2,
+    mazeList[currMaze].heightOffset + mazeList[currMaze].initPacmanMazeCoords[0]*tileLength + tileLength/2,
+    mazeList[currMaze].initPacmanMazeCoords[2]],
     [1.0, 1.0, 0.0, 1]
 )
+pacman.mazeCoords = [mazeList[currMaze].initPacmanMazeCoords[0],
+mazeList[currMaze].initPacmanMazeCoords[1], mazeList[currMaze].initPacmanMazeCoords[2]]
 const pacmanSpeed = tileLength
-
+// adding the pacman to the scene
 scene.add(pacman)
-// scene.add(m1)
 
+// moveMode is used to toggle between normal and modify mode
 var moveMode = true
 
+// stores if the pacman is on a power pellet or not
+var onAPowerPellet = false
+
+// controls all the keyboard inputs
 document.addEventListener("keydown", event => {
-    // console.log(event);
-    // moveMode = true
+    // mvFlg stores if the pacman has moved with the current keystroke or not
     var mvFlg = false
+
+    // rotFlg stores if the maze has been rotated in this keystroke or not
     var rotFlg = false
     pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
 
-    // for(var i = 0;i < mazeList[currMaze].enemList.length;i++) {
-    //     mazeList[currMaze].enemList[i].transform.setRotPoint(mazeList[currMaze].enemList[i].center[0],
-    //         mazeList[currMaze].enemList[i].center[1], mazeList[currMaze].enemList[i].center[2])
-    //     mazeList[currMaze].enemList[i].calcAngleGivenConfiguration(pacman.config)
-    //     mazeList[currMaze].enemList[i].transform.setAngleAboutSetAxis(mazeList[currMaze].enemList[i].locAngle)
-    //     // mazeList[currMaze].enemList[i].transform.rotAboutSetAxis(90 * Math.PI / 180)
-    // }
-
-    // debug
+    // following actions will take place if moveMode is on
     if(moveMode) {
-        if(event.key == "(") {
+        // ( and ) can be used to rotate pacman by + or - 45 degrees
+        if(event.key == "(" && onAPowerPellet == false) {
             pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
-            pacman.locRotAboutSetAxis(-45 * Math.PI / 180)
-            pacman.transform.setAngleAboutSetAxis(pacman.locAngle)
-            // pacman.transform.rotAboutSetAxis(-45 * Math.PI/180);
+            pacman.locAddRot(-45 * Math.PI / 180)
+            pacman.transform.setAngle(pacman.locAngle)
         }
-        if(event.key == ")") {
+        if(event.key == ")" && onAPowerPellet == false) {
             pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
-            pacman.locRotAboutSetAxis(45 * Math.PI / 180)
-            pacman.transform.setAngleAboutSetAxis(pacman.locAngle)
-            // pacman.transform.rotAboutSetAxis(45 * Math.PI/180);
+            pacman.locAddRot(45 * Math.PI / 180)
+            pacman.transform.setAngle(pacman.locAngle)
         }
 
+        // when arrow keys are pressed, appropriate pacman coordinates are calculated
+        // according to the orientation and then the pacman is moved
+        // the details about the orientation are given in the maze.js file
         if(event.key == "ArrowUp") {
-            if(pacman.config == 0) {
+            if(pacman.orientation == 0) {
                 mvFlg = moveOgUp(3)
-            } else if(pacman.config == 1) {
+            } else if(pacman.orientation == 1) {
                 mvFlg = moveOgLeft(3)
-            } else if(pacman.config == 2) {
+            } else if(pacman.orientation == 2) {
                 mvFlg = moveOgDown(3)
-            } else if(pacman.config == 3) {
+            } else if(pacman.orientation == 3) {
                 mvFlg = moveOgRight(3)
             }
-            // pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
-            // pacman.locSetAngleAboutSetAxis(-90 * Math.PI / 180)
-            // pacman.transform.setAngleAboutSetAxis(pacman.locAngle)
-            // // pacman.transform.setAngleAboutSetAxis(-90 * Math.PI / 180)
-            // if(mazeList[currMaze].layout[pacmanMazeCoords[0]-1][pacmanMazeCoords[1]] != 1) {
-            //     // console.log(mazeList[currMaze].initPacmanMazeCoords)
-            //     pacman.translate(0, -pacmanSpeed, 0)
-            //     // pacman.transform.translate(0, -pacmanSpeed, 0)
-            //     mvFlg = true
-            //     pacmanMazeCoords[0] = pacmanMazeCoords[0] - 1
-            // }
         }
         if(event.key == "ArrowRight") {
-            if(pacman.config == 0) {
+            if(pacman.orientation == 0) {
                 mvFlg = moveOgRight(0)
-            } else if(pacman.config == 1) {
+            } else if(pacman.orientation == 1) {
                 mvFlg = moveOgUp(0)
-            } else if(pacman.config == 2) {
+            } else if(pacman.orientation == 2) {
                 mvFlg = moveOgLeft(0)
-            } else if(pacman.config == 3) {
+            } else if(pacman.orientation == 3) {
                 mvFlg = moveOgDown(0)
             }
-            // pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
-            // pacman.locSetAngleAboutSetAxis(0 * Math.PI / 180)
-            // pacman.transform.setAngleAboutSetAxis(pacman.locAngle)
-            // // pacman.transform.setAngleAboutSetAxis(0 * Math.PI / 180)
-            // if(mazeList[currMaze].layout[pacmanMazeCoords[0]][pacmanMazeCoords[1]+1] != 1) {
-            //     // console.log(mazeList[currMaze].initPacmanMazeCoords)
-            //     pacman.translate(pacmanSpeed, 0, 0)
-            //     // pacman.transform.translate(pacmanSpeed, 0, 0)
-            //     mvFlg = true
-            //     pacmanMazeCoords[1] = pacmanMazeCoords[1] + 1
-            // }
         }
         if(event.key == "ArrowDown") {
-            if(pacman.config == 0) {
+            if(pacman.orientation == 0) {
                 mvFlg = moveOgDown(1)
-            } else if(pacman.config == 1) {
+            } else if(pacman.orientation == 1) {
                 mvFlg = moveOgRight(1)
-            } else if(pacman.config == 2) {
+            } else if(pacman.orientation == 2) {
                 mvFlg = moveOgUp(1)
-            } else if(pacman.config == 3) {
+            } else if(pacman.orientation == 3) {
                 mvFlg = moveOgLeft(1)
             }
-            // pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
-            // pacman.locSetAngleAboutSetAxis(90 * Math.PI / 180)
-            // pacman.transform.setAngleAboutSetAxis(pacman.locAngle)
-            // // pacman.transform.setAngleAboutSetAxis(90 * Math.PI / 180)
-            // if(mazeList[currMaze].layout[pacmanMazeCoords[0]+1][pacmanMazeCoords[1]] != 1) {
-            //     // console.log(mazeList[currMaze].initPacmanMazeCoords)
-            //     pacman.translate(0, pacmanSpeed, 0)
-            //     // pacman.transform.translate(0, pacmanSpeed, 0)
-            //     mvFlg = true
-            //     pacmanMazeCoords[0] = pacmanMazeCoords[0] + 1
-            // }
         }
         if(event.key == "ArrowLeft") {
-            if(pacman.config == 0) {
+            if(pacman.orientation == 0) {
                 mvFlg = moveOgLeft(2)
-            } else if(pacman.config == 1) {
+            } else if(pacman.orientation == 1) {
                 mvFlg = moveOgDown(2)
-            } else if(pacman.config == 2) {
+            } else if(pacman.orientation == 2) {
                 mvFlg = moveOgRight(2)
-            } else if(pacman.config == 3) {
+            } else if(pacman.orientation == 3) {
                 mvFlg = moveOgUp(2)
             }
-            // pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
-            // pacman.locSetAngleAboutSetAxis(-180 * Math.PI / 180)
-            // pacman.transform.setAngleAboutSetAxis(pacman.locAngle)
-            // // pacman.transform.setAngleAboutSetAxis(-180 * Math.PI / 180)
-            // if(mazeList[currMaze].layout[pacmanMazeCoords[0]][pacmanMazeCoords[1]-1] != 1) {
-            //     // console.log(mazeList[currMaze].initPacmanMazeCoords)
-            //     pacman.translate(-pacmanSpeed, 0, 0)
-            //     // pacman.transform.translate(-pacmanSpeed, 0, 0)
-            //     mvFlg = true
-            //     pacmanMazeCoords[1] = pacmanMazeCoords[1] - 1
-            // }
         }
 
+        // if the pacman moves after the arrows keys are pressed then
+        // the pellets and pacman are updated accordingly
         if(mvFlg) {
-            // for(var i = 0;i < mazeList[currMaze].nPltList.length;i++) {
-            //     if(pacmanMazeCoords[0] == mazeList[currMaze].nPltList[i].mazeCoords[0] && pacmanMazeCoords[1] == mazeList[currMaze].nPltList[i].mazeCoords[1]) {
-            //         mazeList[currMaze].nPltList[i].visit()
-            //     }
-            // }
             nPltUpdate()
-
-            // for(var i = 0;i < mazeList[currMaze].pPltList.length;i++) {
-            //     if(pacmanMazeCoords[0] == mazeList[currMaze].pPltList[i].mazeCoords[0] && pacmanMazeCoords[1] == mazeList[currMaze].pPltList[i].mazeCoords[1]) {
-            //         pacman.transform.setScale(1.5, 1.5, 0)
-            //         for(var j = 0;j < mazeList[currMaze].enemList.length;j++) {
-            //             mazeList[currMaze].enemList[j].changeColor()
-            //         }
-            //         break
-            //     }
-
-            //     if(i == mazeList[currMaze].pPltList.length - 1) {
-            //         pacman.transform.setScale(1.0, 1.0, 0)
-            //         for(var j = 0;j < mazeList[currMaze].enemList.length;j++) {
-            //             mazeList[currMaze].enemList[j].unchangeColor()
-            //         }
-            //     }
-            // }
             pPltUpdate()
-
         }
-        // up: x, y
-        // right: -y, x
-        // down: x, y
-        // left: y, -x
 
-        if(event.key == "[") {
+        // [ and ] can be used to rotate the maze clockwise and anticlockwise
+        // these moves can be made only when the pacman is not on a power pellet
+        if(event.key == "[" && onAPowerPellet == false) {
+            // the rotFlg is raised
             rotFlg = true
-            // pacman.transform.setAngleAboutSetAxis(0)
+            
+            // the pacman is rotated with the appropriate axis and angle
             pacman.transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-            pacman.globRotAboutSetAxis(-90 * Math.PI / 180)
-            pacman.transform.setAngleAboutSetAxis(pacman.globAngle)
-            // pacman.transform.rotAboutSetAxis(-90 * Math.PI / 180)
-            // var currTransVec = [pacman.transform.transVec[0], pacman.transform.transVec[1], pacman.transform.transVec[2]]
-            // pacman.transform.translateTo(currTransVec[1], -currTransVec[0], currTransVec[2])
-            if(pacman.config == 0) {
-                pacman.config = 3
-                mazeList[currMaze].config = 3
+            pacman.globAddRot(-90 * Math.PI / 180)
+            pacman.transform.setAngle(pacman.globAngle)
+
+            // the pacman and the maze configurations are updates
+            if(pacman.orientation == 0) {
+                pacman.orientation = 3
+                mazeList[currMaze].orientation = 3
             } else {
-                pacman.config = pacman.config - 1
-                mazeList[currMaze].config = mazeList[currMaze].config - 1
+                pacman.orientation = pacman.orientation - 1
+                mazeList[currMaze].orientation = mazeList[currMaze].orientation - 1
             }
-            // pacman.translate()
-            // pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
 
+            // the enemies are moved into their new positions
             for(var i = 0;i < mazeList[currMaze].enemList.length;i++) {
-                // mazeList[currMaze].enemList[i].transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-                // mazeList[currMaze].enemList[i].globRotAboutSetAxis(-90 * Math.PI / 180)
-                // mazeList[currMaze].enemList[i].transform.setAngleAboutSetAxis(mazeList[currMaze].enemList[i].globAngle)
-                // mazeList[currMaze].enemList[i].transform.rotAboutSetAxis(-90 * Math.PI / 180)
                 mazeList[currMaze].enemList[i].translate(mazeList[currMaze])
-                // mazeList[currMaze].enemList[i].transform.rotAboutSetAxis(0 * Math.PI / 180)
             }
 
+            // the normal pellets are moved into their new positions
             for(var i = 0;i < mazeList[currMaze].nPltList.length;i++) {
                 mazeList[currMaze].nPltList[i].transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-                mazeList[currMaze].nPltList[i].transform.rotAboutSetAxis(-90 * Math.PI / 180)
-                // mazeList[currMaze].nPltList[i].transform.setRotPoint(mazeList[currMaze].primitiveList[i].center[0], mazeList[currMaze].primitiveList[i].center[1], mazeList[currMaze].primitiveList[i].center[2])
+                mazeList[currMaze].nPltList[i].transform.addRot(-90 * Math.PI / 180)
             }
 
+            // the power pellets are moved into their new positions
             for(var i = 0;i < mazeList[currMaze].pPltList.length;i++) {
                 mazeList[currMaze].pPltList[i].transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-                mazeList[currMaze].pPltList[i].transform.rotAboutSetAxis(-90 * Math.PI / 180)
-                // mazeList[currMaze].pPltList[i].transform.setRotPoint(mazeList[currMaze].primitiveList[i].center[0], mazeList[currMaze].primitiveList[i].center[1], mazeList[currMaze].primitiveList[i].center[2])
+                mazeList[currMaze].pPltList[i].transform.addRot(-90 * Math.PI / 180)
             }
 
+            // the walls are moved into their new positions
             for(var i = 0;i < mazeList[currMaze].wallList.length;i++) {
                 mazeList[currMaze].wallList[i].transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-                mazeList[currMaze].wallList[i].transform.rotAboutSetAxis(-90 * Math.PI / 180)
-                // mazeList[currMaze].wallList[i].transform.setRotPoint(mazeList[currMaze].primitiveList[i].center[0], mazeList[currMaze].primitiveList[i].center[1], mazeList[currMaze].primitiveList[i].center[2])
+                mazeList[currMaze].wallList[i].transform.addRot(-90 * Math.PI / 180)
             }
 
-            // for(var i = 0;i < mazeList[currMaze].primitiveList.length;i++) {
-            //     mazeList[currMaze].primitiveList[i].transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-            //     mazeList[currMaze].primitiveList[i].transform.rotAboutSetAxis(-90 * Math.PI / 180)
-            //     // mazeList[currMaze].primitiveList[i].transform.setRotPoint(mazeList[currMaze].primitiveList[i].center[0], mazeList[currMaze].primitiveList[i].center[1], mazeList[currMaze].primitiveList[i].center[2])
-            // }
         }
 
-        if(event.key == "]") {
+        if(event.key == "]" && onAPowerPellet == false) {
+            // rotFlg is raised
             rotFlg = true
-            // pacman.transform.setAngleAboutSetAxis(0)
+
+            // the pacman is rotated with the appropriate axis and angle
             pacman.transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-            pacman.globRotAboutSetAxis(90 * Math.PI / 180)
-            pacman.transform.setAngleAboutSetAxis(pacman.globAngle)
-            // pacman.transform.rotAboutSetAxis(90 * Math.PI / 180)
-            // var currTransVec = [pacman.transform.transVec[0], pacman.transform.transVec[1], pacman.transform.transVec[2]]
-            // pacman.transform.translateTo(-currTransVec[1], currTransVec[0], currTransVec[2])
-            if(pacman.config == 3) {
-                pacman.config = 0
-                mazeList[currMaze].config = 0
+            pacman.globAddRot(90 * Math.PI / 180)
+            pacman.transform.setAngle(pacman.globAngle)
+
+            // the pacman and the maze configurations are updates
+            if(pacman.orientation == 3) {
+                pacman.orientation = 0
+                mazeList[currMaze].orientation = 0
             } else {
-                pacman.config = pacman.config + 1
-                mazeList[currMaze].config = mazeList[currMaze].config + 1
+                pacman.orientation = pacman.orientation + 1
+                mazeList[currMaze].orientation = mazeList[currMaze].orientation + 1
             }
-            // pacman.translate()
-            // pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
 
+            // the enemies are moved into their new positions            
             for(var i = 0;i < mazeList[currMaze].enemList.length;i++) {
-                // mazeList[currMaze].enemList[i].transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-                // mazeList[currMaze].enemList[i].globRotAboutSetAxis(90 * Math.PI / 180)
-                // mazeList[currMaze].enemList[i].transform.setAngleAboutSetAxis(mazeList[currMaze].enemList[i].globAngle)
-                // mazeList[currMaze].enemList[i].transform.rotAboutSetAxis(90 * Math.PI / 180)
                 mazeList[currMaze].enemList[i].translate(mazeList[currMaze])
-                // mazeList[currMaze].enemList[i].transform.rotAboutSetAxis(0 * Math.PI / 180)
             }
 
+            // the normal pellets are moved into their new positions
             for(var i = 0;i < mazeList[currMaze].nPltList.length;i++) {
                 mazeList[currMaze].nPltList[i].transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-                mazeList[currMaze].nPltList[i].transform.rotAboutSetAxis(90 * Math.PI / 180)
-                // mazeList[currMaze].nPltList[i].transform.setRotPoint(mazeList[currMaze].primitiveList[i].center[0], mazeList[currMaze].primitiveList[i].center[1], mazeList[currMaze].primitiveList[i].center[2])
+                mazeList[currMaze].nPltList[i].transform.addRot(90 * Math.PI / 180)
             }
 
+            // the power pellets are moved into their new positions
             for(var i = 0;i < mazeList[currMaze].pPltList.length;i++) {
                 mazeList[currMaze].pPltList[i].transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-                mazeList[currMaze].pPltList[i].transform.rotAboutSetAxis(90 * Math.PI / 180)
-                // mazeList[currMaze].pPltList[i].transform.setRotPoint(mazeList[currMaze].primitiveList[i].center[0], mazeList[currMaze].primitiveList[i].center[1], mazeList[currMaze].primitiveList[i].center[2])
+                mazeList[currMaze].pPltList[i].transform.addRot(90 * Math.PI / 180)
             }
 
+            // the walls are moved into their new positions            
             for(var i = 0;i < mazeList[currMaze].wallList.length;i++) {
                 mazeList[currMaze].wallList[i].transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-                mazeList[currMaze].wallList[i].transform.rotAboutSetAxis(90 * Math.PI / 180)
-                // mazeList[currMaze].wallList[i].transform.setRotPoint(mazeList[currMaze].primitiveList[i].center[0], mazeList[currMaze].primitiveList[i].center[1], mazeList[currMaze].primitiveList[i].center[2])
+                mazeList[currMaze].wallList[i].transform.addRot(90 * Math.PI / 180)
             }
 
-            // for(var i = 0;i < mazeList[currMaze].primitiveList.length;i++) {
-            //     mazeList[currMaze].primitiveList[i].transform.setRotPoint(mazeList[currMaze].mazeCenter[0], mazeList[currMaze].mazeCenter[1], mazeList[currMaze].mazeCenter[2])
-            //     mazeList[currMaze].primitiveList[i].transform.rotAboutSetAxis(90 * Math.PI / 180)
-            //     // mazeList[currMaze].primitiveList[i].transform.setRotPoint(mazeList[currMaze].primitiveList[i].center[0], mazeList[currMaze].primitiveList[i].center[1], mazeList[currMaze].primitiveList[i].center[2])
-            // }
         }
 
-        if(event.key == "c") {
+        // the maze layout is changed
+        if(event.key == "c" && onAPowerPellet == false) {
+            // the current maze is removed from the scene
             for(var i = 0;i < mazeList[currMaze].primitiveList.length;i++) {
                 scene.remove(mazeList[currMaze].primitiveList[i])
             }
+
+            // the normal pellets are reset
+            for(var i = 0;i < mazeList[currMaze].nPltList.length;i++) {
+                mazeList[currMaze].nPltList[i].unvisit()
+            }
+
+            // the maze is reset
+            mazeList[currMaze].resetMaze()
+
+            // the pacman is removed from the scene
             scene.remove(pacman)
+
+            // the currMaze index is updated
             if(currMaze == 2) {
                 currMaze = 0
             } else {
                 currMaze = currMaze + 1
             }
+
+            // the new maze is added to the scene
             for(var i = 0;i < mazeList[currMaze].primitiveList.length;i++) {
                 scene.add(mazeList[currMaze].primitiveList[i])
             }
-            var currPacmanCoords = pacmanMazeCoords
-            pacmanMazeCoords = [mazeList[currMaze].initPacmanMazeCoords[0],
-            mazeList[currMaze].initPacmanMazeCoords[1], mazeList[currMaze].initPacmanMazeCoords[2]]
-            // console.log(mazeList[currMaze].initPacmanMazeCoords)
-            // var tranDiff = [pacmanMazeCoords[1] - currPacmanCoords[1],
-            // pacmanMazeCoords[0] - currPacmanCoords[0], pacmanMazeCoords[2] - currPacmanCoords[2]]
-            // pacman.translate(tranDiff[0]*tileLength, tranDiff[1]*tileLength, tranDiff[2])
-            // pacman.transform.translate(tranDiff[0]*tileLength, tranDiff[1]*tileLength, tranDiff[2])
 
-            pacman.config = mazeList[currMaze].config
+            // the pacman's maze coordinated are updated
+            pacman.mazeCoords = [mazeList[currMaze].initPacmanMazeCoords[0],
+            mazeList[currMaze].initPacmanMazeCoords[1], mazeList[currMaze].initPacmanMazeCoords[2]]
+
+            // the pacman faces in the normal direction
+            pacman.transform.setAngle(0)
+
+            // the orientation and the global angle of the pacman are reset
+            pacman.orientation = 0
+            pacman.globSetAngle(0)
             
+            // pacman is added back to the scene
             scene.add(pacman)
         }
 
-        pacman.configChange(rotFlg, pacmanMazeCoords, mazeList[currMaze])
+        // updates related to the movements are made to the pacman
+        pacman.update(rotFlg, pacman.mazeCoords, mazeList[currMaze])
     }
 
+    // modify mode is toggled
     if(event.key == "m") {
         if(moveMode == true) {
             moveMode = false
@@ -360,152 +291,163 @@ document.addEventListener("keydown", event => {
     }
 })
 
+// this is the top left offset of the canvas object on the browser window
 const canvasTopLeftOffset = [10, 10]
+// this 
 var pickPacman = false
+// coordinate buffer to make the modfication step interactive
+var pacmanCoordBuffer = []
 
+// mouse events are handled here
 document.addEventListener("click", event => {
-    var mouseGridCoords = [pixelToGridCoords(event.clientX - canvasTopLeftOffset[0], event.clientY - canvasTopLeftOffset[1], 0)[0],
-    pixelToGridCoords(event.clientX - canvasTopLeftOffset[0], event.clientY - canvasTopLeftOffset[1], 0)[1],
-    pixelToGridCoords(event.clientX - canvasTopLeftOffset[0], event.clientY - canvasTopLeftOffset[1], 0)[2]]
-
-    console.log(mouseGridCoords)
-    console.log(pacmanMazeCoords)
-
+    // this is executed only if the modify mode is on
     if(moveMode == false) {
-        if(pacmanMazeCoords[0] == mouseGridCoords[0] && pacmanMazeCoords[1] == mouseGridCoords[1]) {
-            console.log("hello")
+        // the mouse grid coordinated are translated to the original orientation and returned
+        var mouseGridCoords = [pixelToGridCoords(event.clientX - canvasTopLeftOffset[0],event.clientY - canvasTopLeftOffset[1], 0)[0],
+        pixelToGridCoords(event.clientX - canvasTopLeftOffset[0], event.clientY - canvasTopLeftOffset[1], 0)[1],
+        pixelToGridCoords(event.clientX - canvasTopLeftOffset[0], event.clientY - canvasTopLeftOffset[1], 0)[2]]
+
+        // if pacman has not been picked up
+        if(pickPacman == false && pacman.mazeCoords[0] == mouseGridCoords[0] && pacman.mazeCoords[1] == mouseGridCoords[1]) {
+            // pacman is picked if clicked correctly
             pickPacman = true
-        } else if (pickPacman == true) {
-            // console.log("hello")
+            // coordinates are stored
+            pacmanCoordBuffer = [pacman.mazeCoords[0], pacman.mazeCoords[1], pacman.mazeCoords[2]]
+        } else if(pickPacman == true) {
+            // if the point is accessible, place the pacman otherwise, replace it back
             if(mazeList[currMaze].layout[mouseGridCoords[0]][mouseGridCoords[1]] != 1) {
-                // var tranDiff = [mouseGridCoords[1] - pacmanMazeCoords[1],
-                // mouseGridCoords[0] - pacmanMazeCoords[0], mouseGridCoords[2] - pacmanMazeCoords[2]]
-                pacmanMazeCoords = [mouseGridCoords[0], mouseGridCoords[1], mouseGridCoords[2]]
-                // pacman.translate(tranDiff[0]*tileLength, tranDiff[1]*tileLength, tranDiff[2])
-                pacman.configChange(false, pacmanMazeCoords, mazeList[currMaze])
+                pacman.mazeCoords = [mouseGridCoords[0], mouseGridCoords[1], mouseGridCoords[2]]
+                pacman.update(false, pacman.mazeCoords, mazeList[currMaze])
+
+                // interact with pellets accordingly
                 nPltUpdate()
                 pPltUpdate()
+            } else {
+                // use the coordinate buffer to replace the pacman
+                pacman.mazeCoords = [pacmanCoordBuffer[0], pacmanCoordBuffer[1], pacmanCoordBuffer[2]]
+                pacman.update(false, pacman.mazeCoords, mazeList[currMaze])
             }
+
+            // unpick the pacman
             pickPacman = false
         }
     }
 })
 
+document.addEventListener('mousemove', event => {
+    // this is executed only if the modify mode is on
+    if(moveMode == false) {
+        // the mouse grid coordinated are translated to the original orientation and returned
+        var mouseGridCoords = [pixelToGridCoords(event.clientX - canvasTopLeftOffset[0],event.clientY - canvasTopLeftOffset[1], 0)[0],
+        pixelToGridCoords(event.clientX - canvasTopLeftOffset[0], event.clientY - canvasTopLeftOffset[1], 0)[1],
+        pixelToGridCoords(event.clientX - canvasTopLeftOffset[0], event.clientY - canvasTopLeftOffset[1], 0)[2]]
+
+        // if pacman is picked, 
+        if(pickPacman == true) {
+            if(mazeList[currMaze].layout[mouseGridCoords[0]][mouseGridCoords[1]] != 1) {
+                pacman.mazeCoords = [mouseGridCoords[0], mouseGridCoords[1], mouseGridCoords[2]]
+                pacman.update(false, pacman.mazeCoords, mazeList[currMaze])
+            }
+        }
+    }
+})
+
+// this function returns grid coords in the original orientation
+// when given any position on the screen
 function pixelToGridCoords(x, y, z) {
-    // console.log([mazeList[currMaze].getOffset()[1], mazeList[currMaze].getOffset()[0]])
-    // console.log([y, x])
-    if(pacman.config == 0) {
-        const gridX = Math.floor((y - mazeList[currMaze].getOffset()[1])/tileLength)
-        const gridY = Math.floor((x - mazeList[currMaze].getOffset()[0])/tileLength)
-        const gridZ = 0
+    const gridX = Math.floor((y - mazeList[currMaze].getOffset()[1])/tileLength)
+    const gridY = Math.floor((x - mazeList[currMaze].getOffset()[0])/tileLength)
+    const gridZ = 0
 
+    if(pacman.orientation == 0) {
         return [gridX, gridY, gridZ]
-    }
-    if(pacman.config == 1) {
-        const gridX = Math.floor((y - mazeList[currMaze].getOffset()[1])/tileLength)
-        const gridY = Math.floor((x - mazeList[currMaze].getOffset()[0])/tileLength)
-        const gridZ = 0
-
+    } else if(pacman.orientation == 1) {
         return [mazeList[currMaze].layout.length - 1 - gridY, gridX, gridZ]
-    }
-    if(pacman.config == 2) {
-        const gridX = Math.floor((y - mazeList[currMaze].getOffset()[1])/tileLength)
-        const gridY = Math.floor((x - mazeList[currMaze].getOffset()[0])/tileLength)
-        const gridZ = 0
-
+    } else if(pacman.orientation == 2) {
         return [mazeList[currMaze].layout.length - 1 - gridX, mazeList[currMaze].layout[0].length - 1 - gridY, gridZ]
-    }
-    if(pacman.config == 3) {
-        const gridX = Math.floor((y - mazeList[currMaze].getOffset()[1])/tileLength)
-        const gridY = Math.floor((x - mazeList[currMaze].getOffset()[0])/tileLength)
-        const gridZ = 0
-
+    } else if(pacman.orientation == 3) {
         return [gridY, mazeList[currMaze].layout[0].length - 1 - gridX, gridZ]
     }
 }
 
+// this function handles the normal pellets interactions
 function nPltUpdate() {
     for(var i = 0;i < mazeList[currMaze].nPltList.length;i++) {
-        if(pacmanMazeCoords[0] == mazeList[currMaze].nPltList[i].mazeCoords[0] && pacmanMazeCoords[1] == mazeList[currMaze].nPltList[i].mazeCoords[1]) {
+        if(pacman.mazeCoords[0] == mazeList[currMaze].nPltList[i].mazeCoords[0] && pacman.mazeCoords[1] == mazeList[currMaze].nPltList[i].mazeCoords[1]) {
             mazeList[currMaze].nPltList[i].visit()
         }
     }
 }
 
+// this function handles the power pellets interactions
 function pPltUpdate() {
     for(var i = 0;i < mazeList[currMaze].pPltList.length;i++) {
-        if(pacmanMazeCoords[0] == mazeList[currMaze].pPltList[i].mazeCoords[0] && pacmanMazeCoords[1] == mazeList[currMaze].pPltList[i].mazeCoords[1]) {
-            pacman.transform.setScale(1.5, 1.5, 0)
+        if(pacman.mazeCoords[0] == mazeList[currMaze].pPltList[i].mazeCoords[0] && pacman.mazeCoords[1] == mazeList[currMaze].pPltList[i].mazeCoords[1]) {
+            pacman.transform.setScale(1.5, 1.5, 1.5)
             for(var j = 0;j < mazeList[currMaze].enemList.length;j++) {
                 mazeList[currMaze].enemList[j].changeColor()
             }
+            onAPowerPellet = true
             break
         }
 
         if(i == mazeList[currMaze].pPltList.length - 1) {
-            pacman.transform.setScale(1.0, 1.0, 0)
+            pacman.transform.setScale(1.0, 1.0, 1.0)
             for(var j = 0;j < mazeList[currMaze].enemList.length;j++) {
                 mazeList[currMaze].enemList[j].unchangeColor()
             }
+            onAPowerPellet = false
         }
     }
 }
 
+// this function moves the pacman right on the original grid
 function moveOgRight(scrnDir) {
     pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
-    pacman.locSetAngleAboutSetAxis(scrnDir * 90 * Math.PI / 180)
-    pacman.transform.setAngleAboutSetAxis(pacman.locAngle)
-    // pacman.transform.setAngleAboutSetAxis(0 * Math.PI / 180)
-    if(mazeList[currMaze].layout[pacmanMazeCoords[0]][pacmanMazeCoords[1]+1] != 1) {
-        // console.log(mazeList[currMaze].initPacmanMazeCoords)
+    pacman.locSetAngle(scrnDir * 90 * Math.PI / 180)
+    pacman.transform.setAngle(pacman.locAngle)
+    if(mazeList[currMaze].layout[pacman.mazeCoords[0]][pacman.mazeCoords[1]+1] != 1) {
         pacman.translate(pacmanSpeed, 0, 0)
-        // pacman.transform.translate(pacmanSpeed, 0, 0)
-        pacmanMazeCoords[1] = pacmanMazeCoords[1] + 1
+        pacman.mazeCoords[1] = pacman.mazeCoords[1] + 1
         return true
     }
     return false
 }
 
+// this function moves the pacman left on the original grid
 function moveOgLeft(scrnDir) {
     pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
-    pacman.locSetAngleAboutSetAxis(scrnDir * 90 * Math.PI / 180)
-    pacman.transform.setAngleAboutSetAxis(pacman.locAngle)
-    // pacman.transform.setAngleAboutSetAxis(-180 * Math.PI / 180)
-    if(mazeList[currMaze].layout[pacmanMazeCoords[0]][pacmanMazeCoords[1]-1] != 1) {
-        // console.log(mazeList[currMaze].initPacmanMazeCoords)
+    pacman.locSetAngle(scrnDir * 90 * Math.PI / 180)
+    pacman.transform.setAngle(pacman.locAngle)
+    if(mazeList[currMaze].layout[pacman.mazeCoords[0]][pacman.mazeCoords[1]-1] != 1) {
         pacman.translate(-pacmanSpeed, 0, 0)
-        // pacman.transform.translate(-pacmanSpeed, 0, 0)
-        pacmanMazeCoords[1] = pacmanMazeCoords[1] - 1
+        pacman.mazeCoords[1] = pacman.mazeCoords[1] - 1
         return true
     }
     return false
 }
 
-function moveOgUp(scrnDir, mvFlg) {
+// this function moves the pacman up on the original grid
+function moveOgUp(scrnDir) {
     pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
-    pacman.locSetAngleAboutSetAxis(scrnDir * 90 * Math.PI / 180)
-    pacman.transform.setAngleAboutSetAxis(pacman.locAngle)
-    // pacman.transform.setAngleAboutSetAxis(-90 * Math.PI / 180)
-    if(mazeList[currMaze].layout[pacmanMazeCoords[0]-1][pacmanMazeCoords[1]] != 1) {
-        // console.log(mazeList[currMaze].initPacmanMazeCoords)
+    pacman.locSetAngle(scrnDir * 90 * Math.PI / 180)
+    pacman.transform.setAngle(pacman.locAngle)
+    if(mazeList[currMaze].layout[pacman.mazeCoords[0]-1][pacman.mazeCoords[1]] != 1) {
         pacman.translate(0, -pacmanSpeed, 0)
-        // pacman.transform.translate(0, -pacmanSpeed, 0)
-        pacmanMazeCoords[0] = pacmanMazeCoords[0] - 1
+        pacman.mazeCoords[0] = pacman.mazeCoords[0] - 1
         return true
     }
     return false
 }
 
-function moveOgDown(scrnDir, mvFlg) {
+// this function moves the pacman down on the original grid
+function moveOgDown(scrnDir) {
     pacman.transform.setRotPoint(pacman.center[0], pacman.center[1], pacman.center[2])
-    pacman.locSetAngleAboutSetAxis(scrnDir * 90 * Math.PI / 180)
-    pacman.transform.setAngleAboutSetAxis(pacman.locAngle)
-    // pacman.transform.setAngleAboutSetAxis(90 * Math.PI / 180)
-    if(mazeList[currMaze].layout[pacmanMazeCoords[0]+1][pacmanMazeCoords[1]] != 1) {
-        // console.log(mazeList[currMaze].initPacmanMazeCoords)
+    pacman.locSetAngle(scrnDir * 90 * Math.PI / 180)
+    pacman.transform.setAngle(pacman.locAngle)
+    if(mazeList[currMaze].layout[pacman.mazeCoords[0]+1][pacman.mazeCoords[1]] != 1) {
         pacman.translate(0, pacmanSpeed, 0)
-        // pacman.transform.translate(0, pacmanSpeed, 0)
-        pacmanMazeCoords[0] = pacmanMazeCoords[0] + 1
+        pacman.mazeCoords[0] = pacman.mazeCoords[0] + 1
         return true
     }
     return false
@@ -514,9 +456,14 @@ function moveOgDown(scrnDir, mvFlg) {
 
 renderer.setAnimationLoop(animation);
 
-//Draw loop
 function animation() 
 {
-    renderer.clear(0.8, 0.8, 0.8, 1);
+    // the background color changes to
+    // indicate toggling the modify mode
+    if(moveMode) {
+        renderer.clear(0.0, 0.0, 0.0, 1);
+    } else {
+        renderer.clear(0.2, 0.2, 0.2, 1);
+    }
     renderer.render(scene, shader);
 }
